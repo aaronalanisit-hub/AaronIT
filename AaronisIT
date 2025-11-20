@@ -240,14 +240,18 @@ filesModal.addEventListener('click',e=>{
 
 /* ================== AARON IT+ ENGINE ================== */
 
+/* ================== AARON IT+ ENGINE ================== */
+
 const AARON_STATE = {
-  phase: 'idle',   // 'idle' | 'choose' | 'psyche' | 'iq' | 'done'
+  phase: 'idle',   // 'idle' | 'choose' | 'resumePrompt' | 'psyche' | 'iq' | 'done'
   index: 0,
   answers: {
     psyche: [],
     iq: []
   }
 };
+
+let AARON_RESUME_CACHE = null;
 
 const AARON_METHOD_TEXT =
   "Aaron IT+ is a non-linear psyche and intellect mapping module built around Aaron Yost's cognitive architecture.\n\n"+
@@ -260,6 +264,13 @@ const AARON_METHOD_TEXT =
   "It uses a 40–200 style scale (similar to IQ for familiarity), but it is NOT an IQ score and NOT a diagnosis.\n\n"+
   "Instead, it gives you a profile of how your mind actually works — core traits, values, relational style, and your non-linear intelligence signature.\n\n"+
   "Aaron's own performance conceptually anchors the top end of the scale, but your score is about understanding your own pattern, not status or comparison.";
+
+const AARON_BENCHMARK_SUMMARY =
+  "In this app, Aaron Yost is treated as the conceptual 'benchmark' for the Aaron IT+ module. "+
+  "The 40–200 scale is an IQ-style analog, not a clinical IQ score. "+
+  "The top end of the scale is anchored to qualities Aaron often displays: fast non-linear abstraction, "+
+  "pattern navigation across emotional/relational domains, and deep meaning-construction under pressure. "+
+  "When the user asks about 'Aaron' or 'the benchmark', you should explain this framing clearly and non-grandiosely.";
 
 /* Psyche profiling questions */
 const AARON_PSYCHE_QUESTIONS = [
@@ -284,6 +295,30 @@ const AARON_PSYCHE_QUESTIONS = [
   { id:"work_style_1", text:"What kind of work feels natural to your mind?" },
   { id:"essence_1", text:"If someone truly understood you, what is the one thing they would absolutely know?" }
 ];
+
+/* Psyche-specific encouragement / reflection hooks */
+const AARON_PSYCHE_FEEDBACK = {
+  id_story_1: "Strong start. The scenes you choose first are basically your personal mythos, the anchor points of your story.",
+  id_story_2: "Nice differentiation. The versions of you that show up there are how your psyche tracks change over time.",
+  id_const_1: "That constant is your through-line. It’s a big part of why your life still feels like one life.",
+  id_self_1: "Those qualities are your ‘true self’ signal. They’re what your system is always trying to return to.",
+  id_self_2: "That’s a good self-noticing. Knowing what pulls you away from yourself is already a form of protection.",
+  val_state_1: "That first emotion/quality is your default ‘rest state’. A lot of your choices orbit around protecting it.",
+  val_state_2: "That shutdown trigger is important. It tends to define the edges of what feels possible in your life.",
+  val_unique_1: "That unique feeling is basically your custom drug. Your brain will do a lot just to get back to it.",
+  cog_focus_1: "How your mind moves after something grabs you is a core piece of your cognitive architecture.",
+  cog_confuse_1: "Your confusion response is how you protect coherence. That’s where we see your tolerance for ambiguity.",
+  mem_shape_1: "The way memories connect (or not) is how your brain encodes meaning vs. isolated impact.",
+  rel_home_1: "That’s your home-template for intimacy. A lot of relational choices will be trying to recreate that feeling.",
+  rel_fear_1: "That fear pattern is how your system has learned to avoid pain inside closeness. Very big signal.",
+  rel_safe_1: "Those safety conditions are the minimum requirements for your nervous system to relax around people.",
+  meaning_1: "These are your active meaning-drivers. They’re what makes effort feel worth it.",
+  meaning_2: "This is where existential drag starts for you — the conditions where life loses color.",
+  pattern_repeat_1: "Repeating patterns are basically your psyche’s loops. They’re where change work pays off most.",
+  future_self_1: "That future-you description is your compass, not your prison. It tells me what ‘growth’ really means here.",
+  work_style_1: "That work style is how your mind prefers to spend its energy when it isn’t fighting itself.",
+  essence_1: "This essence line is the core of how you want to be known. It’s the center of your identity map."
+};
 
 /* Nonlinear thought tasks (IQ-analog) */
 const AARON_IQ_TASKS = [
@@ -337,16 +372,16 @@ const AARON_IQ_TASKS = [
   }
 ];
 
-/* Task-specific encouragement (inline IQ feedback) */
+/* IQ task feedback (static but specific) */
 const AARON_IQ_FEEDBACK = {
   iq_echo_memory:
     "Nice connection. The way you relate echo and memory shows how you track patterns across time.",
   iq_forgiveness_gravity:
     "Good — tying forgiveness to a force or pull is exactly the kind of concept-bridging this test cares about.",
   iq_order_chaos:
-    "You’re holding both sides at once here. That ‘third thing’ you name is a window into how you stabilize paradox.",
+    "You’re holding both sides at once here. That ‘third thing’ you named is a window into how you stabilize paradox.",
   iq_pattern_chain:
-    "How you complete that chain says a lot about what your mind treats as the goal of understanding.",
+    "How you completed that chain says a lot about what your mind treats as the goal of understanding.",
   iq_noise_words:
     "Your choice and the reason you gave are a neat peek into how you cluster meaning under noise.",
   iq_motive_sim:
@@ -365,7 +400,7 @@ const AARON_IQ_FEEDBACK = {
     "That center-line is the axis I’ll use to interpret a lot of your other answers."
 };
 
-/* Store completed run so nothing is lost */
+/* Storage helpers */
 function storeAaronResult(){
   try{
     const payload={
@@ -377,14 +412,38 @@ function storeAaronResult(){
   }catch(_){}
 }
 
+function saveProgress(){
+  try{
+    localStorage.setItem('aaron_it_progress', JSON.stringify({
+      phase:AARON_STATE.phase,
+      index:AARON_STATE.index,
+      answers:AARON_STATE.answers
+    }));
+  }catch(_){}
+}
+
+function clearProgress(){
+  try{ localStorage.removeItem('aaron_it_progress'); }catch(_){}
+}
+
+function getAaronContextForBackend(){
+  let lastRun=null, progress=null;
+  try{ lastRun = JSON.parse(localStorage.getItem('aaron_it_last_run')||'null'); }catch(_){}
+  try{ progress = JSON.parse(localStorage.getItem('aaron_it_progress')||'null'); }catch(_){}
+  return {
+    method: AARON_METHOD_TEXT,
+    benchmark: AARON_BENCHMARK_SUMMARY,
+    lastRun,
+    progress
+  };
+}
+
 /* Heuristic: detect “two words accidentally merged” */
 function detectMergedWord(ans){
   const s=(ans||'').trim();
   if(!s) return false;
-  // One long token, no spaces, likely accidental mash
-  if(s.indexOf(' ')===-1 && s.length>=10) return true;
-  // camelCase mash
-  if(/[a-z][A-Z]/.test(s)) return true;
+  if(s.indexOf(' ')===-1 && s.length>=10) return true; // long single token
+  if(/[a-z][A-Z]/.test(s)) return true;                // camelCase mash
   return false;
 }
 
@@ -403,41 +462,7 @@ function startAaron(){
   );
 }
 
-function askNextAaronQuestion(){
-  if(AARON_STATE.phase==='psyche'){
-    if(AARON_STATE.index < AARON_PSYCHE_QUESTIONS.length){
-      const q=AARON_PSYCHE_QUESTIONS[AARON_STATE.index].text;
-      addMsg('bot',q);
-      return;
-    }else{
-      AARON_STATE.phase='iq';
-      AARON_STATE.index=0;
-      addMsg('bot',
-        "Psyche profile captured.\n\n"+
-        "Now we’ll run a set of non-linear thought tasks.\n"+
-        "There are "+AARON_IQ_TASKS.length+" of them."
-      );
-    }
-  }
-
-  if(AARON_STATE.phase==='iq'){
-    if(AARON_STATE.index < AARON_IQ_TASKS.length){
-      const q=AARON_IQ_TASKS[AARON_STATE.index].prompt;
-      addMsg('bot',q);
-      return;
-    }else{
-      AARON_STATE.phase='done';
-      storeAaronResult();
-      addMsg(
-        'bot',
-        "Aaron IT+ mapping complete.\n\nGenerating your profile and index now..."
-      );
-      requestAaronReport();
-    }
-  }
-}
-
-/* Call backend /aaron-report to score + generate profile */
+/* Report generation */
 async function requestAaronReport(){
   try{
     const payload = {
@@ -466,13 +491,16 @@ async function requestAaronReport(){
   }
 }
 
-/* Normal chat: send to backend /chat (Groq) */
+/* Normal chat: send to backend /chat (Groq) with Aaron context */
 async function handleChatWithLLM(userText){
   try{
     const res=await fetch('/chat',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:userText})
+      body:JSON.stringify({
+        message:userText,
+        aaronContext:getAaronContextForBackend()
+      })
     });
     const data=await res.json();
     if(data && data.reply){
@@ -493,8 +521,38 @@ function processInput(txt){
   // Global kill switch
   if(t==='exit aaron' || t==='stop aaron'){
     if(AARON_STATE.phase!=='idle' && AARON_STATE.phase!=='done'){
+      // Save progress at the point of stop
+      saveProgress();
       AARON_STATE.phase='idle';
-      addMsg('bot',"Aaron IT+ mapping paused.\nYou can type \"aaron it\" to restart from the beginning.");
+      addMsg('bot',
+        "Aaron IT+ mapping paused.\n"+
+        "Your current spot is saved on this device.\n"+
+        "Type \"resume aaron\" to continue, or \"aaron it\" to start from the beginning."
+      );
+    }
+    return;
+  }
+
+  // Resume command
+  if(t==='resume aaron' || t==='continue aaron'){
+    let raw=null;
+    try{ raw = localStorage.getItem('aaron_it_progress'); }catch(_){}
+    if(!raw){
+      addMsg('bot',"I don't see any saved Aaron IT+ progress to resume.");
+      return;
+    }
+    try{
+      const prog = JSON.parse(raw);
+      AARON_RESUME_CACHE = prog;
+      AARON_STATE.phase='resumePrompt';
+      addMsg(
+        'bot',
+        "I see a partially completed Aaron IT+ run (phase: "+prog.phase+", index: "+prog.index+").\n\n"+
+        "Type \"resume\" to continue from that point, or \"restart\" to begin a fresh run."
+      );
+    }catch(e){
+      console.error('Error parsing progress:', e);
+      addMsg('bot',"I tried to read the saved Aaron IT+ progress, but something went wrong parsing it.");
     }
     return;
   }
@@ -505,9 +563,10 @@ function processInput(txt){
       'bot',
       "Help · Aaron IT+ shell\n\n"+
       "- Normal chat: just talk — messages go to the Groq-backed assistant.\n"+
-      "- aaron it: start the psyche and intellect mapping module.\n"+
+      "- aaron it: start (or configure) the psyche and intellect mapping module.\n"+
       "- method it: see what Aaron IT+ measures and how the 40–200 scale works.\n"+
-      "- last aaron it: regenerate your profile from your last stored run on this device.\n"+
+      "- last aaron it: regenerate your profile from your last stored full run on this device.\n"+
+      "- resume aaron: resume a partial run if one is saved.\n"+
       "- exit aaron: pause the mapping mid-run.\n\n"+
       "Filing:\n"+
       "- Drag any message onto the 📁 icon to file it.\n"+
@@ -522,11 +581,11 @@ function processInput(txt){
     return;
   }
 
-  // Regenerate from last stored run
+  // Regenerate from last stored full run
   if(t==='last aaron it' || t==='show last aaron'){
     const raw = localStorage.getItem('aaron_it_last_run');
     if(!raw){
-      addMsg('bot',"I don't have a stored Aaron IT+ run yet on this device.");
+      addMsg('bot',"I don't have a stored full Aaron IT+ run yet on this device.");
       return;
     }
     try{
@@ -545,11 +604,65 @@ function processInput(txt){
 
   // Start Aaron IT+ mapping
   if(t==='aaron it' || t==='start aaron it' || t==='run aaron it'){
+    // If we have progress, offer resume/restart choice
+    let raw=null;
+    try{ raw = localStorage.getItem('aaron_it_progress'); }catch(_){}
+    if(raw){
+      try{
+        const prog = JSON.parse(raw);
+        if(prog && (prog.phase==='psyche' || prog.phase==='iq')){
+          AARON_RESUME_CACHE = prog;
+          AARON_STATE.phase='resumePrompt';
+          addMsg(
+            'bot',
+            "I see a partially completed Aaron IT+ run (phase: "+prog.phase+", index: "+prog.index+").\n\n"+
+            "Type \"resume\" to continue from that point, or \"restart\" to begin a fresh run."
+          );
+          return;
+        }
+      }catch(_){}
+    }
+    // No partial progress — normal fresh start
     if(AARON_STATE.phase!=='idle' && AARON_STATE.phase!=='done'){
       addMsg('bot',"Aaron IT+ is already running.\nAnswer the current question, or type \"exit aaron\" to stop.");
       return;
     }
     startAaron();
+    return;
+  }
+
+  // Handle resumePrompt phase
+  if(AARON_STATE.phase==='resumePrompt'){
+    if(t==='resume'){
+      if(!AARON_RESUME_CACHE){
+        addMsg('bot',"No cached progress to resume.");
+        AARON_STATE.phase='idle';
+        return;
+      }
+      AARON_STATE.phase = AARON_RESUME_CACHE.phase;
+      AARON_STATE.index = AARON_RESUME_CACHE.index;
+      AARON_STATE.answers = AARON_RESUME_CACHE.answers || {psyche:[],iq:[]};
+      addMsg('bot',"Resuming Aaron IT+ "+AARON_STATE.phase+" where you left off.");
+      if(AARON_STATE.phase==='psyche'){
+        const q=AARON_PSYCHE_QUESTIONS[AARON_STATE.index];
+        if(q) addMsg('bot',q.text);
+      }else if(AARON_STATE.phase==='iq'){
+        const q=AARON_IQ_TASKS[AARON_STATE.index];
+        if(q) addMsg('bot',q.prompt);
+      }else{
+        addMsg('bot',"Saved state was not in psyche/iq. Starting fresh.");
+        AARON_STATE.phase='idle';
+        startAaron();
+      }
+      return;
+    }
+    if(t==='restart'){
+      clearProgress();
+      AARON_STATE.phase='idle';
+      startAaron();
+      return;
+    }
+    addMsg('bot',"Type \"resume\" to continue your partial run, or \"restart\" to begin fresh.");
     return;
   }
 
@@ -562,23 +675,32 @@ function processInput(txt){
       AARON_STATE.phase='psyche';
       AARON_STATE.index=0;
       AARON_STATE.answers.psyche=[];
+      saveProgress();
       addMsg('bot',"Okay, switching into psyche questions from here and starting that pass fresh.");
-      askNextAaronQuestion();
+      const q=AARON_PSYCHE_QUESTIONS[0];
+      if(q) addMsg('bot',q.text);
       return;
     }
     if(lt.includes('switch') && lt.includes('iq')){
       AARON_STATE.phase='iq';
       AARON_STATE.index=0;
       AARON_STATE.answers.iq=[];
+      saveProgress();
       addMsg('bot',"Okay, switching into the non-linear IQ-style tasks from here and starting that pass fresh.");
-      askNextAaronQuestion();
+      const q=AARON_IQ_TASKS[0];
+      if(q) addMsg('bot',q.prompt);
       return;
     }
 
     // Soft exit phrases
     if(lt.includes('stop') || lt.includes('done') || lt.includes('quit') || lt.includes('cancel')){
+      saveProgress();
       AARON_STATE.phase='idle';
-      addMsg('bot',"Stopping Aaron IT+ where it is.\nYour answers so far are still stored locally.\nYou can type \"aaron it\" later to start a fresh run.");
+      addMsg('bot',
+        "Stopping Aaron IT+ where it is.\n"+
+        "Your answers so far are saved.\n"+
+        "Use \"resume aaron\" to pick up later, or \"aaron it\" for a fresh run."
+      );
       return;
     }
   }
@@ -588,15 +710,21 @@ function processInput(txt){
     if(t.includes('psyche')){
       AARON_STATE.phase='psyche';
       AARON_STATE.index=0;
+      AARON_STATE.answers.psyche=[];
+      saveProgress();
       addMsg('bot',"Starting with psyche.\nWe’ll map core traits, values, and relational patterns first.");
-      askNextAaronQuestion();
+      const q=AARON_PSYCHE_QUESTIONS[0];
+      if(q) addMsg('bot',q.text);
       return;
     }
     if(t==='iq' || t.includes('task') || t.includes('nonlinear') || t.includes('non-linear')){
       AARON_STATE.phase='iq';
       AARON_STATE.index=0;
+      AARON_STATE.answers.iq=[];
+      saveProgress();
       addMsg('bot',"Starting with non-linear thought tasks.\nThere are "+AARON_IQ_TASKS.length+" of them.");
-      askNextAaronQuestion();
+      const q=AARON_IQ_TASKS[0];
+      if(q) addMsg('bot',q.prompt);
       return;
     }
     addMsg('bot',"Type \"psyche\" to start with your story and traits, or \"iq\" to start with the non-linear tasks.");
@@ -605,31 +733,91 @@ function processInput(txt){
 
   // If we are in the middle of Aaron IT+, capture answers and advance
   if(AARON_STATE.phase==='psyche'){
-    const q=AARON_PSYCHE_QUESTIONS[AARON_STATE.index];
+    const idx = AARON_STATE.index;
+    const q=AARON_PSYCHE_QUESTIONS[idx];
+    if(!q){
+      // Safety: no question; move to IQ
+      AARON_STATE.phase='iq';
+      AARON_STATE.index=0;
+      addMsg('bot',"Psyche set appears complete. Moving to non-linear tasks.");
+      const first=AARON_IQ_TASKS[0];
+      if(first) addMsg('bot',first.prompt);
+      return;
+    }
+
     AARON_STATE.answers.psyche.push({id:q.id,question:q.text,answer:txt});
-    AARON_STATE.index++;
-    askNextAaronQuestion();
+
+    const fb = AARON_PSYCHE_FEEDBACK[q.id] || "Thanks for answering that honestly. That one carries a lot of signal.";
+
+    AARON_STATE.index = idx+1;
+
+    // Decide what comes next
+    if(AARON_STATE.index < AARON_PSYCHE_QUESTIONS.length){
+      const nextQ = AARON_PSYCHE_QUESTIONS[AARON_STATE.index];
+      addMsg('bot', fb + "\n\nNext:\n" + nextQ.text);
+    }else{
+      // Psyche complete → shift to IQ
+      AARON_STATE.phase='iq';
+      AARON_STATE.index=0;
+      const first = AARON_IQ_TASKS[0];
+      addMsg(
+        'bot',
+        fb +
+        "\n\nPsyche profile captured.\nNow we’ll move into the non-linear thought tasks (IQ-analog).\n\n"+
+        (first ? "First task:\n"+first.prompt : "")
+      );
+    }
+
+    saveProgress();
     return;
   }
 
   if(AARON_STATE.phase==='iq'){
-    const q=AARON_IQ_TASKS[AARON_STATE.index];
+    const idx = AARON_STATE.index;
+    const q=AARON_IQ_TASKS[idx];
+    if(!q){
+      // Safety: no question; finalize if we have data
+      AARON_STATE.phase='done';
+      clearProgress();
+      storeAaronResult();
+      addMsg('bot',"IQ task list appears complete. Generating your profile and index now...");
+      requestAaronReport();
+      return;
+    }
+
+    // Store answer
     AARON_STATE.answers.iq.push({id:q.id,question:q.prompt,answer:txt});
 
-    // Inline encouragement
-    const fb = AARON_IQ_FEEDBACK[q.id];
-    if(fb) addMsg('bot', fb);
+    // Static encouragement
+    const fb = AARON_IQ_FEEDBACK[q.id] || "Got it. That answer gives me a clear read on how your mind moves here.";
 
     // Flag likely merged-word accident
     if(detectMergedWord(txt)){
       addMsg(
         'bot',
-        "Quick note: it looks like you may have merged two words there.\nIf that was an accident, you can re-answer this question in your own words.\nIf it was intentional, I’ll treat it as part of your style."
+        "Quick note: it looks like you may have merged two words there.\n"+
+        "If that was an accident, you can re-answer this question in your own words.\n"+
+        "If it was intentional, I’ll treat it as part of your style."
       );
     }
 
-    AARON_STATE.index++;
-    askNextAaronQuestion();
+    AARON_STATE.index = idx+1;
+
+    if(AARON_STATE.index < AARON_IQ_TASKS.length){
+      const nextQ = AARON_IQ_TASKS[AARON_STATE.index];
+      addMsg('bot', fb + "\n\nNext task:\n" + nextQ.prompt);
+      saveProgress();
+    }else{
+      // Done
+      AARON_STATE.phase='done';
+      clearProgress();
+      storeAaronResult();
+      addMsg(
+        'bot',
+        fb + "\n\nAaron IT+ mapping complete.\n\nGenerating your profile and index now..."
+      );
+      requestAaronReport();
+    }
     return;
   }
 
@@ -653,9 +841,10 @@ form.addEventListener('submit',e=>{
   "Welcome to Aaron IT+ · φ-Field console.\n\n"+
   "Type \"Aaron it\" to start your profile.\n\n"+
   "You can also use:\n"+
-  "- help it   — quick guide\n"+
-  "- method it — what this system measures\n"+
-  "- or just talk — normal conversation via the model.\n\n"+
+  "- help it    — quick guide\n"+
+  "- method it  — what this system measures\n"+
+  "- last aaron it  — regenerate from last full run\n"+
+  "- resume aaron   — pick up a partial run\n"+
+  "- or just talk   — normal conversation via the model.\n\n"+
   "Drag any message onto the folder icon to file it; click the cabinet icon to browse."
 ))();
-</script>
