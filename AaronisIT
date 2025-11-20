@@ -1,0 +1,661 @@
+<script>
+/* φ–FIELD BG (Phyllo swirl) */
+(()=>{
+  const T=Math.PI*2,
+        c=document.getElementById('bg'),
+        x=c.getContext('2d');
+  let W=0,H=0,D=1,t=0,run=1;
+  const s={CS:.987,TSI:.10,novelty:.20,presence:.82};
+
+  function fit(){
+    D=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+    W=innerWidth;
+    H=innerHeight;
+    c.width=Math.round(W*D);
+    c.height=Math.round(H*D);
+    c.style.width=W+'px';
+    c.style.height=H+'px';
+    x.setTransform(D,0,0,D,0,0);
+  }
+  addEventListener('resize',fit,{passive:!0});
+  fit();
+
+  const C=(v,a,b)=>Math.max(a,Math.min(b,v)),
+        L=(a,b,u)=>a+(b-a)*u,
+        E=u=>u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2,
+        GA=CS=>{
+          const g=Math.PI*(3-Math.sqrt(5)),d=(1-CS)*.02;
+          return g*(1+d*Math.sin(t*.25));
+        },
+        R=(seed=1234567)=>{
+          let s=seed>>>0;
+          return()=>((s=(s*1664525+1013904223)>>>0)/4294967296);
+        };
+
+  function draw(){
+    const g=x.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#05080d');
+    g.addColorStop(1,'#0a0f16');
+    x.fillStyle=g;
+    x.fillRect(0,0,W,H);
+
+    const cx=W*.5,cy=H*.52,maxR=Math.min(W,H)*.49,
+          CS=C(s.CS,.7,1),TSI=C(s.TSI,0,1),
+          nv=C(s.novelty,0,1),pr=C(s.presence,0,1);
+
+    const N=Math.floor(L(600,3200,E(pr))),
+          ang=GA(CS),base=L(2.2,6,CS),jit=L(0,1,TSI),
+          spin=nv*.8,breath=1+.045*Math.sin(t*.5),
+          rand=R(123456789^(N<<1));
+
+    x.save();
+    x.translate(cx,cy);
+
+    for(let i=0;i<N;i++){
+      const a=i*ang+t*spin,r=Math.sqrt(i)*base*breath;
+      let px=Math.cos(a)*r,py=Math.sin(a)*r;
+
+      px+=(rand()-.5)*jit*(.6+.6*Math.sin(i*.017+t*.3));
+      py+=(rand()-.5)*jit*(.6+.6*Math.cos(i*.013-t*.25));
+
+      const scale=maxR/(Math.sqrt(N)*5.8),
+            x0=px*scale,y0=py*scale,
+            sz=L(1.2,2.8,CS)*(1-.5*TSI),
+            p=i/N,
+            h=(210+90*p+120*nv+26*Math.sin(t*.28))%360,
+            sa=Math.round(L(42,68,CS)),
+            lu=Math.round(L(34,62,1-TSI));
+
+      x.fillStyle=`hsl(${h} ${sa}% ${lu}%)`;
+      x.beginPath();
+      x.arc(x0,y0,sz,0,T);
+      x.fill();
+    }
+
+    x.restore();
+  }
+
+  let last=performance.now();
+  function loop(now){
+    const dt=(now-last)/1e3;last=now;
+    if(run)t+=dt;
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  window.PHYLLO={
+    update(m={}){
+      if('CS'in m)s.CS=m.CS;
+      if('TSI'in m)s.TSI=m.TSI;
+      if('novelty'in m)s.novelty=m.novelty;
+      if('presence'in m)s.presence=m.presence;
+      if('running'in m)run=!!m.running;
+    }
+  };
+})();
+
+/* Chat + Filing (UI only) */
+const $=id=>document.getElementById(id),
+      stream=$('stream'),
+      form=$('form'),
+      input=$('input'),
+      fileBtn=$('file-btn'),
+      filesBtn=$('files-btn'),
+      filesModal=$('files-modal'),
+      modalCloseBtn=$('modal-close-btn'),
+      modalList=$('modal-list'),
+      fileCount=$('file-count');
+
+function linkify(s){
+  return (s||'')
+    .replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
+    .replace(/\bhttps?:\/\/[^\s)]+/g,u=>`<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+}
+
+function addMsg(role,html){
+  const id=Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+        row=document.createElement('div');
+  row.className='row '+(role==='user'?'user':'bot')+' emerge';
+  row.draggable=!0;
+  row.dataset.messageId=id;
+
+  const b=document.createElement('div');
+  b.className='bubble '+(role==='user'?'user':'bot');
+  b.innerHTML=linkify(html);
+
+  const meta=document.createElement('div');
+  meta.className='meta';
+  meta.textContent=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+
+  row.appendChild(b);
+  row.appendChild(meta);
+  stream.appendChild(row);
+
+  setTimeout(()=>row.classList.add('active'),10);
+  row.addEventListener('dragstart',onDragStart);
+  stream.scrollTop=stream.scrollHeight;
+}
+
+let filed=(()=>{
+  try{
+    const r=localStorage.getItem('itplus_files_v1');
+    return r?JSON.parse(r):[];
+  }catch(_){
+    return [];
+  }
+})();
+
+function saveFiled(){
+  localStorage.setItem('itplus_files_v1',JSON.stringify(filed));
+}
+
+function onDragStart(e){
+  const text=e.currentTarget.querySelector('.bubble').textContent;
+  e.dataTransfer.setData('text/plain',text);
+  e.dataTransfer.setData('message/id',e.currentTarget.dataset.messageId);
+  e.dataTransfer.effectAllowed='move';
+  fileBtn.style.color='var(--accent)';
+  fileBtn.style.transform='scale(1.2)';
+}
+
+fileBtn.addEventListener('dragover',e=>{
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  fileBtn.style.opacity=.8;
+});
+
+fileBtn.addEventListener('dragleave',()=>{
+  fileBtn.style.opacity=1;
+});
+
+fileBtn.addEventListener('drop',e=>{
+  e.preventDefault();
+  fileBtn.style.color='var(--ink)';
+  fileBtn.style.transform='scale(1)';
+  fileBtn.style.opacity=1;
+
+  const text=e.dataTransfer.getData('text/plain'),
+        id=e.dataTransfer.getData('message/id');
+
+  filed.push({
+    id,
+    text,
+    time:new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+  });
+  saveFiled();
+
+  addMsg(
+    'bot',
+    'Filing complete: message has been tagged and filed ('+filed.length+' total).\nA new file will be created with the entry:\n'+
+    text.substring(0,60).trim()+'...'
+  );
+
+  const row=document.querySelector('[data-message-id="'+id+'"]');
+  if(row)row.remove();
+});
+
+addEventListener('dragend',()=>{
+  fileBtn.style.color='var(--ink)';
+  fileBtn.style.transform='scale(1)';
+  fileBtn.style.opacity=1;
+});
+
+function openFiles(){
+  modalList.innerHTML='';
+  fileCount.textContent=filed.length;
+
+  if(!filed.length){
+    modalList.innerHTML=
+      '<div style="text-align:center;padding:20px;color:#9aa7b6;">'+
+      'No items filed yet. Drag a message onto the 📁 icon to start filing.'+
+      '</div>';
+  }else{
+    filed.slice().reverse().forEach(it=>{
+      const d=document.createElement('div');
+      d.className='file-item';
+      d.innerHTML=linkify(it.text)+'<span class="file-item-time">'+it.time+'</span>';
+      modalList.appendChild(d);
+    });
+    addMsg('bot','Files opened: '+filed.length+' filed item(s) found.\nUse the close button or click outside to dismiss.');
+  }
+
+  filesModal.classList.add('open');
+  filesModal.setAttribute('aria-hidden','false');
+}
+
+filesBtn.addEventListener('click',openFiles);
+
+modalCloseBtn.addEventListener('click',()=>{
+  filesModal.classList.remove('open');
+  filesModal.setAttribute('aria-hidden','true');
+});
+
+filesModal.addEventListener('click',e=>{
+  if(e.target.id==='files-modal'){
+    filesModal.classList.remove('open');
+    filesModal.setAttribute('aria-hidden','true');
+  }
+});
+
+/* ================== AARON IT+ ENGINE ================== */
+
+const AARON_STATE = {
+  phase: 'idle',   // 'idle' | 'choose' | 'psyche' | 'iq' | 'done'
+  index: 0,
+  answers: {
+    psyche: [],
+    iq: []
+  }
+};
+
+const AARON_METHOD_TEXT =
+  "Aaron IT+ is a non-linear psyche and intellect mapping module built around Aaron Yost's cognitive architecture.\n\n"+
+  "It measures patterns standard IQ tests mostly ignore:\n"+
+  "- relational abstraction (how you connect ideas)\n"+
+  "- pattern navigation (how you move through partial or uncertain patterns)\n"+
+  "- perspective mobility (how you see through other minds)\n"+
+  "- creative divergence (how your mind opens into new possibilities)\n"+
+  "- meaning construction (how you extract truth and coherence from experience)\n\n"+
+  "It uses a 40–200 style scale (similar to IQ for familiarity), but it is NOT an IQ score and NOT a diagnosis.\n\n"+
+  "Instead, it gives you a profile of how your mind actually works — core traits, values, relational style, and your non-linear intelligence signature.\n\n"+
+  "Aaron's own performance conceptually anchors the top end of the scale, but your score is about understanding your own pattern, not status or comparison.";
+
+/* Psyche profiling questions */
+const AARON_PSYCHE_QUESTIONS = [
+  { id:"id_story_1", text:"When you tell your life story to yourself—not to anyone else—what are the first few scenes or periods that show up?" },
+  { id:"id_story_2", text:"For those scenes, what version of you shows up in each?" },
+  { id:"id_const_1", text:"What part of you feels like it has stayed the same across all of them?" },
+  { id:"id_self_1", text:"When you feel most like yourself right now, what qualities or tones show up?" },
+  { id:"id_self_2", text:"What makes you feel unlike yourself?" },
+  { id:"val_state_1", text:"When you’re healthy and present, what emotion or quality tends to show up first inside you?" },
+  { id:"val_state_2", text:"What emotion or situation shuts you down the fastest?" },
+  { id:"val_unique_1", text:"What is something that gives you a feeling nothing else can give you?" },
+  { id:"cog_focus_1", text:"When something really captures your attention, what does your mind do next?" },
+  { id:"cog_confuse_1", text:"When things are unclear or confusing, how does your mind usually respond?" },
+  { id:"mem_shape_1", text:"When you look at your most vivid memories, do they connect into a story, or do they stand alone as moments?" },
+  { id:"rel_home_1", text:"What kind of closeness feels like home to you?" },
+  { id:"rel_fear_1", text:"What kind of closeness scares you, even if the other person isn’t doing anything wrong?" },
+  { id:"rel_safe_1", text:"What makes you feel safe in a relationship?" },
+  { id:"meaning_1", text:"What gives your life meaning right now?" },
+  { id:"meaning_2", text:"What tends to make life feel meaningless for you?" },
+  { id:"pattern_repeat_1", text:"What problems or patterns tend to repeat in your life?" },
+  { id:"future_self_1", text:"When you imagine becoming your best self, what does that version of you feel like?" },
+  { id:"work_style_1", text:"What kind of work feels natural to your mind?" },
+  { id:"essence_1", text:"If someone truly understood you, what is the one thing they would absolutely know?" }
+];
+
+/* Nonlinear thought tasks (IQ-analog) */
+const AARON_IQ_TASKS = [
+  {
+    id:"iq_echo_memory",
+    prompt:"Task — Relational abstraction:\n\nOne way “echo” and “memory” are the same, and one way they are different."
+  },
+  {
+    id:"iq_forgiveness_gravity",
+    prompt:"Task — Concept bridge:\n\nMake a meaningful connection between “forgiveness” and “gravity”. Any bridge that feels true counts."
+  },
+  {
+    id:"iq_order_chaos",
+    prompt:"Task — Polarity:\n\nBetween “order” and “chaos”, there is a third thing that can hold both. What is it, in your words?"
+  },
+  {
+    id:"iq_pattern_chain",
+    prompt:"Task — Pattern completion:\n\nFill in the next natural step in this sequence for you:\n\nCuriosity → Exploration → Understanding → ___ ?"
+  },
+  {
+    id:"iq_noise_words",
+    prompt:"Task — Noise sorting:\n\nFrom this list, pick two words that feel most connected, and say why:\n\nGlass, Promise, Map, Wound, Horizon"
+  },
+  {
+    id:"iq_motive_sim",
+    prompt:"Task — Perspective:\n\nSomeone you love says “I’m fine”, but everything in their tone and body is wrong.\nGive one inner reason they might say “I’m fine” while they are not okay."
+  },
+  {
+    id:"iq_mind_landscape",
+    prompt:"Task — Metaphor:\n\nDescribe your mind right now as an environment (landscape, ocean, city, whatever feels truest)."
+  },
+  {
+    id:"iq_hope_constraint",
+    prompt:"Task — Constraint creativity:\n\nWrite one sentence that expresses hope without using the word “hope”."
+  },
+  {
+    id:"iq_key_symbol",
+    prompt:"Task — Symbol:\n\nI’ll give you an object: a key.\nWhat does a key symbolize in human experience, to you?"
+  },
+  {
+    id:"iq_doorway_scene",
+    prompt:"Task — Meaning extraction:\n\nYou’re standing in a doorway at night. Someone you love is crying quietly in the next room; they don’t know you’re there yet.\nWhat is the meaning inside that moment, for you?"
+  },
+  {
+    id:"iq_paradox_closeness",
+    prompt:"Task — Paradox:\n\n“I want closeness.”\n“I’m afraid of closeness.”\nExplain how both can be true at the same time for one person."
+  },
+  {
+    id:"iq_center_truth",
+    prompt:"Final task — Essence:\n\nWhat is the single truth at the center of your life right now?"
+  }
+];
+
+/* Task-specific encouragement (inline IQ feedback) */
+const AARON_IQ_FEEDBACK = {
+  iq_echo_memory:
+    "Nice connection. The way you relate echo and memory shows how you track patterns across time.",
+  iq_forgiveness_gravity:
+    "Good — tying forgiveness to a force or pull is exactly the kind of concept-bridging this test cares about.",
+  iq_order_chaos:
+    "You’re holding both sides at once here. That ‘third thing’ you name is a window into how you stabilize paradox.",
+  iq_pattern_chain:
+    "How you complete that chain says a lot about what your mind treats as the goal of understanding.",
+  iq_noise_words:
+    "Your choice and the reason you gave are a neat peek into how you cluster meaning under noise.",
+  iq_motive_sim:
+    "That motive read shows how you simulate another person’s inner world under pressure.",
+  iq_mind_landscape:
+    "That environment metaphor is a direct map of your current internal topology. Very useful signal.",
+  iq_hope_constraint:
+    "Nice constraint play. Expressing hope without the word itself shows how you move around concepts.",
+  iq_key_symbol:
+    "Your take on ‘key’ is basically your template for access, safety, or permission in the world.",
+  iq_doorway_scene:
+    "How you read that doorway moment encodes your personal meaning-grammar for pain and care.",
+  iq_paradox_closeness:
+    "That explanation is your working model of intimacy and threat — big signal for the profile.",
+  iq_center_truth:
+    "That center-line is the axis I’ll use to interpret a lot of your other answers."
+};
+
+/* Store completed run so nothing is lost */
+function storeAaronResult(){
+  try{
+    const payload={
+      time:new Date().toISOString(),
+      psyche:AARON_STATE.answers.psyche,
+      iq:AARON_STATE.answers.iq
+    };
+    localStorage.setItem('aaron_it_last_run',JSON.stringify(payload));
+  }catch(_){}
+}
+
+/* Heuristic: detect “two words accidentally merged” */
+function detectMergedWord(ans){
+  const s=(ans||'').trim();
+  if(!s) return false;
+  // One long token, no spaces, likely accidental mash
+  if(s.indexOf(' ')===-1 && s.length>=10) return true;
+  // camelCase mash
+  if(/[a-z][A-Z]/.test(s)) return true;
+  return false;
+}
+
+function startAaron(){
+  AARON_STATE.phase='choose';
+  AARON_STATE.index=0;
+  AARON_STATE.answers.psyche=[];
+  AARON_STATE.answers.iq=[];
+  addMsg(
+    'bot',
+    "Aaron IT+ mapping activated.\n\n"+
+    "You can start with either:\n"+
+    "- psyche  — core traits, values, relationships, meaning\n"+
+    "- iq      — non-linear thought tasks (your intellect pattern)\n\n"+
+    "Type \"psyche\" or \"iq\" to choose where to begin."
+  );
+}
+
+function askNextAaronQuestion(){
+  if(AARON_STATE.phase==='psyche'){
+    if(AARON_STATE.index < AARON_PSYCHE_QUESTIONS.length){
+      const q=AARON_PSYCHE_QUESTIONS[AARON_STATE.index].text;
+      addMsg('bot',q);
+      return;
+    }else{
+      AARON_STATE.phase='iq';
+      AARON_STATE.index=0;
+      addMsg('bot',
+        "Psyche profile captured.\n\n"+
+        "Now we’ll run a set of non-linear thought tasks.\n"+
+        "There are "+AARON_IQ_TASKS.length+" of them."
+      );
+    }
+  }
+
+  if(AARON_STATE.phase==='iq'){
+    if(AARON_STATE.index < AARON_IQ_TASKS.length){
+      const q=AARON_IQ_TASKS[AARON_STATE.index].prompt;
+      addMsg('bot',q);
+      return;
+    }else{
+      AARON_STATE.phase='done';
+      storeAaronResult();
+      addMsg(
+        'bot',
+        "Aaron IT+ mapping complete.\n\nGenerating your profile and index now..."
+      );
+      requestAaronReport();
+    }
+  }
+}
+
+/* Call backend /aaron-report to score + generate profile */
+async function requestAaronReport(){
+  try{
+    const payload = {
+      psyche: AARON_STATE.answers.psyche,
+      iq: AARON_STATE.answers.iq
+    };
+
+    const res = await fetch('/aaron-report', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    const report = data && data.report
+      ? data.report
+      : "No structured report returned from /aaron-report. Check your backend prompt.";
+
+    addMsg('bot', report);
+  }catch(e){
+    console.error('Aaron report error:', e);
+    addMsg(
+      'bot',
+      "There was an error generating your Aaron IT+ report.\nYour raw answers are still stored locally under the key \"aaron_it_last_run\" in this browser."
+    );
+  }
+}
+
+/* Normal chat: send to backend /chat (Groq) */
+async function handleChatWithLLM(userText){
+  try{
+    const res=await fetch('/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:userText})
+    });
+    const data=await res.json();
+    if(data && data.reply){
+      addMsg('bot',data.reply);
+    }else{
+      addMsg('bot',"No reply from backend /chat. Check your server or API wiring.");
+    }
+  }catch(e){
+    console.error('Chat backend error:', e);
+    addMsg('bot',"Error talking to model backend. Make sure /chat exists and your API key is set on the server.");
+  }
+}
+
+/* Command + routing layer */
+function processInput(txt){
+  const t=txt.trim().toLowerCase();
+
+  // Global kill switch
+  if(t==='exit aaron' || t==='stop aaron'){
+    if(AARON_STATE.phase!=='idle' && AARON_STATE.phase!=='done'){
+      AARON_STATE.phase='idle';
+      addMsg('bot',"Aaron IT+ mapping paused.\nYou can type \"aaron it\" to restart from the beginning.");
+    }
+    return;
+  }
+
+  // Help command (HELP IT)
+  if(t==='help it'){
+    addMsg(
+      'bot',
+      "Help · Aaron IT+ shell\n\n"+
+      "- Normal chat: just talk — messages go to the Groq-backed assistant.\n"+
+      "- aaron it: start the psyche and intellect mapping module.\n"+
+      "- method it: see what Aaron IT+ measures and how the 40–200 scale works.\n"+
+      "- last aaron it: regenerate your profile from your last stored run on this device.\n"+
+      "- exit aaron: pause the mapping mid-run.\n\n"+
+      "Filing:\n"+
+      "- Drag any message onto the 📁 icon to file it.\n"+
+      "- Click the cabinet icon to browse filed items."
+    );
+    return;
+  }
+
+  // Method explainer
+  if(t==='method it' || t==='aaron method' || t==='how does aaron it work'){
+    addMsg('bot',AARON_METHOD_TEXT);
+    return;
+  }
+
+  // Regenerate from last stored run
+  if(t==='last aaron it' || t==='show last aaron'){
+    const raw = localStorage.getItem('aaron_it_last_run');
+    if(!raw){
+      addMsg('bot',"I don't have a stored Aaron IT+ run yet on this device.");
+      return;
+    }
+    try{
+      const parsed = JSON.parse(raw);
+      AARON_STATE.answers.psyche = parsed.psyche || [];
+      AARON_STATE.answers.iq = parsed.iq || [];
+      AARON_STATE.phase='done';
+      addMsg('bot',"Re-generating your Aaron IT+ profile from the last stored run...");
+      requestAaronReport();
+    }catch(e){
+      console.error('Error parsing last Aaron run:', e);
+      addMsg('bot',"I tried to read the last Aaron IT+ run, but something went wrong parsing the stored data.");
+    }
+    return;
+  }
+
+  // Start Aaron IT+ mapping
+  if(t==='aaron it' || t==='start aaron it' || t==='run aaron it'){
+    if(AARON_STATE.phase!=='idle' && AARON_STATE.phase!=='done'){
+      addMsg('bot',"Aaron IT+ is already running.\nAnswer the current question, or type \"exit aaron\" to stop.");
+      return;
+    }
+    startAaron();
+    return;
+  }
+
+  // Extra intuitive control while inside psyche/iq
+  if(AARON_STATE.phase==='psyche' || AARON_STATE.phase==='iq'){
+    const lt=t;
+
+    // Switch track
+    if(lt.includes('switch') && lt.includes('psyche')){
+      AARON_STATE.phase='psyche';
+      AARON_STATE.index=0;
+      AARON_STATE.answers.psyche=[];
+      addMsg('bot',"Okay, switching into psyche questions from here and starting that pass fresh.");
+      askNextAaronQuestion();
+      return;
+    }
+    if(lt.includes('switch') && lt.includes('iq')){
+      AARON_STATE.phase='iq';
+      AARON_STATE.index=0;
+      AARON_STATE.answers.iq=[];
+      addMsg('bot',"Okay, switching into the non-linear IQ-style tasks from here and starting that pass fresh.");
+      askNextAaronQuestion();
+      return;
+    }
+
+    // Soft exit phrases
+    if(lt.includes('stop') || lt.includes('done') || lt.includes('quit') || lt.includes('cancel')){
+      AARON_STATE.phase='idle';
+      addMsg('bot',"Stopping Aaron IT+ where it is.\nYour answers so far are still stored locally.\nYou can type \"aaron it\" later to start a fresh run.");
+      return;
+    }
+  }
+
+  // Choice of starting path
+  if(AARON_STATE.phase==='choose'){
+    if(t.includes('psyche')){
+      AARON_STATE.phase='psyche';
+      AARON_STATE.index=0;
+      addMsg('bot',"Starting with psyche.\nWe’ll map core traits, values, and relational patterns first.");
+      askNextAaronQuestion();
+      return;
+    }
+    if(t==='iq' || t.includes('task') || t.includes('nonlinear') || t.includes('non-linear')){
+      AARON_STATE.phase='iq';
+      AARON_STATE.index=0;
+      addMsg('bot',"Starting with non-linear thought tasks.\nThere are "+AARON_IQ_TASKS.length+" of them.");
+      askNextAaronQuestion();
+      return;
+    }
+    addMsg('bot',"Type \"psyche\" to start with your story and traits, or \"iq\" to start with the non-linear tasks.");
+    return;
+  }
+
+  // If we are in the middle of Aaron IT+, capture answers and advance
+  if(AARON_STATE.phase==='psyche'){
+    const q=AARON_PSYCHE_QUESTIONS[AARON_STATE.index];
+    AARON_STATE.answers.psyche.push({id:q.id,question:q.text,answer:txt});
+    AARON_STATE.index++;
+    askNextAaronQuestion();
+    return;
+  }
+
+  if(AARON_STATE.phase==='iq'){
+    const q=AARON_IQ_TASKS[AARON_STATE.index];
+    AARON_STATE.answers.iq.push({id:q.id,question:q.prompt,answer:txt});
+
+    // Inline encouragement
+    const fb = AARON_IQ_FEEDBACK[q.id];
+    if(fb) addMsg('bot', fb);
+
+    // Flag likely merged-word accident
+    if(detectMergedWord(txt)){
+      addMsg(
+        'bot',
+        "Quick note: it looks like you may have merged two words there.\nIf that was an accident, you can re-answer this question in your own words.\nIf it was intentional, I’ll treat it as part of your style."
+      );
+    }
+
+    AARON_STATE.index++;
+    askNextAaronQuestion();
+    return;
+  }
+
+  // Otherwise: normal chat mode
+  handleChatWithLLM(txt);
+}
+
+/* Wire form submission to processInput */
+form.addEventListener('submit',e=>{
+  e.preventDefault();
+  const txt=input.value.trim();
+  if(!txt)return;
+  addMsg('user',txt);
+  input.value='';
+  processInput(txt);
+});
+
+/* Initial bot line */
+(()=>addMsg(
+  'bot',
+  "Welcome to Aaron IT+ · φ-Field console.\n\n"+
+  "Type \"Aaron it\" to start your profile.\n\n"+
+  "You can also use:\n"+
+  "- help it   — quick guide\n"+
+  "- method it — what this system measures\n"+
+  "- or just talk — normal conversation via the model.\n\n"+
+  "Drag any message onto the folder icon to file it; click the cabinet icon to browse."
+))();
+</script>
