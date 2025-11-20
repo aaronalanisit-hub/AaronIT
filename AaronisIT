@@ -1,36 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Aaron IT+ — Chat · φ-Field</title>
+<style>
+:root{
+  --bg:#0b0f14;
+  --ink:#d9e1ea;
+  --muted:#9aa7b6;
+  --line:#18202b;
+  --pane:rgba(13,17,23,.78);
+  --pane-strong:rgba(13,17,23,.88);
+  --accent:#00CED1;
+  --bubble-user:#341C25;
+  --bubble-bot:#2E2A1C;
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0;
+  height:100%;
+  background:var(--bg);
+  color:var(--ink);
+  font:16px/1.45 -apple-system,system-ui,Segoe UI,Roboto,Inter,Helvetica,Arial;
+}
+#bg{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:0;
+  display:block;
+  background:#05080d;
+}
+.top-bar{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  height:40px;
+  z-index:3;
+  backdrop-filter:blur(4px);
+  background:rgba(13,17,23,.75);
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  justify-content:flex-start; /* icons pinned left */
+  gap:12px;
+  padding:0 14px;
+}
+.file-btn{
+  padding:0;
+  font-size:20px;
+  background:0 0;
+  border:0;
+  color:var(--ink);
+  cursor:pointer;
+  line-height:1;
+  transition:color .15s,transform .15s,opacity .15s;
+}
+.pane{
+  position:fixed;
+  top:40px;
+  bottom:0;
+  left:0;
+  right:0;
+  z-index:1;
+  display:flex;
+  justify-content:center;
+  pointer-events:none;
+}
+.chatbox{
+  width:min(980px,100%);
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  padding:0 12px 94px;
+  pointer-events:auto;
+}
+.stream{
+  flex:1;
+  overflow:auto;
+  padding:10px 6px;
+}
+.row{
+  display:flex;
+  gap:10px;
+  margin:8px 0;
+}
+.row.user{justify-content:flex-end}
+.row.emerge{
+  opacity:0;
+  transform:translateY(8px);
+  transition:opacity .5s ease-out,transform .5s ease-out;
+}
+.row.emerge.active{
+  opacity:1;
+  transform:translateY(0);
+}
+.bubble{
+  max-width:38%;
+  padding:12px 14px;
+  border-radius:20px;
+  border:none;
+  box-shadow:0 1px 0 rgba(0,0,0,.2);
+  color:var(--ink);
+  white-space:pre-wrap;
+}
+.bubble.user{
+  background:var(--bubble-user);
+  color:#fff;
+}
+.bubble.bot{background:var(--bubble-bot)}
+.meta{
+  color:var(--muted);
+  font-size:12px;
+  margin-top:6px;
+}
+.controls{
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:0;
+  z-index:3;
+  background:linear-gradient(180deg,rgba(8,12,18,0),var(--pane));
+  border-top:1px solid var(--line);
+}
+.inputbar{
+  max-width:980px;
+  margin:0 auto;
+  padding:10px 12px;
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.inputbar input[type=text]{
+  flex:1;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  background:#0a1018;
+  color:var(--ink);
+}
+.btn{
+  padding:10px 14px;
+  border:1px solid var(--line);
+  background:#121a26;
+  color:var(--ink);
+  border-radius:10px;
+  cursor:pointer;
+}
+.btn:active{transform:translateY(1px)}
+a{
+  color:var(--accent);
+  text-decoration:none;
+  word-break:break-all;
+}
+.modal{
+  position:fixed;
+  inset:0;
+  z-index:99;
+  background:rgba(0,0,0,.75);
+  display:none;
+  justify-content:center;
+  align-items:center;
+  backdrop-filter:blur(4px);
+}
+.modal.open{display:flex}
+.modal-content{
+  background:var(--pane-strong);
+  border-radius:12px;
+  width:90%;
+  max-width:500px;
+  height:80%;
+  display:flex;
+  flex-direction:column;
+  box-shadow:0 4px 30px rgba(0,0,0,.5);
+  border:1px solid var(--line);
+}
+.modal-header{
+  padding:12px 16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid var(--line);
+}
+.modal-close-btn{
+  background:0 0;
+  border:0;
+  color:var(--ink);
+  font-size:24px;
+  cursor:pointer;
+  line-height:1;
+}
+.modal-list{
+  flex:1;
+  overflow:auto;
+  padding:10px;
+}
+.file-item{
+  padding:12px;
+  margin-bottom:8px;
+  background:rgba(46,42,28,.4);
+  border-radius:8px;
+  border-left:3px solid var(--accent);
+  word-wrap:break-word;
+  font-size:14px;
+}
+.file-item-time{
+  display:block;
+  color:var(--muted);
+  font-size:11px;
+  margin-top:4px;
+}
+@media (max-width:520px){
+  .bubble{max-width:86%}
+  .modal-content{
+    width:100%;
+    height:100%;
+    border-radius:0;
+  }
+}
+</style>
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<div class="top-bar">
+  <button id="file-btn" class="file-btn" title="Drag a message here to file it">📁</button>
+  <button id="files-btn" class="file-btn" title="Open filed items">🗄️</button>
+</div>
+
+<div class="pane">
+  <div class="chatbox">
+    <div id="stream" class="stream" aria-live="polite"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <form id="form" class="inputbar" autocomplete="off">
+    <input id="input" type="text" placeholder="Type here… (e.g. &quot;Aaron it&quot;, &quot;help it&quot;, or just talk)"/>
+    <button class="btn" id="send" type="submit">Send</button>
+  </form>
+</div>
+
+<div id="files-modal" class="modal" aria-hidden="true">
+  <div class="modal-content" role="dialog" aria-modal="true" aria-label="Filed items">
+    <div class="modal-header">
+      <div class="title">🗄️ Filed Items (<span id="file-count">0</span>)</div>
+      <button id="modal-close-btn" class="modal-close-btn" aria-label="Close">×</button>
+    </div>
+    <div id="modal-list" class="modal-list"></div>
+  </div>
+</div>
+
 <script>
-/* φ–FIELD BG (Phyllo swirl) */
+/* φ–FIELD BG (Phyllo swirl — restored) */
 (()=>{
-  const T=Math.PI*2,
-        c=document.getElementById('bg'),
-        x=c.getContext('2d');
+  const T=Math.PI*2;
+  const c=document.getElementById('bg');
+  const x=c.getContext('2d');
   let W=0,H=0,D=1,t=0,run=1;
+
   const s={CS:.987,TSI:.10,novelty:.20,presence:.82};
 
   function fit(){
     D=Math.max(1,Math.min(2,window.devicePixelRatio||1));
-    W=innerWidth;
-    H=innerHeight;
+    c.style.width="100%";
+    c.style.height="100%";
+    W=c.clientWidth;
+    H=c.clientHeight;
     c.width=Math.round(W*D);
     c.height=Math.round(H*D);
-    c.style.width=W+'px';
-    c.style.height=H+'px';
     x.setTransform(D,0,0,D,0,0);
   }
   addEventListener('resize',fit,{passive:!0});
   fit();
 
-  const C=(v,a,b)=>Math.max(a,Math.min(b,v)),
-        L=(a,b,u)=>a+(b-a)*u,
-        E=u=>u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2,
-        GA=CS=>{
-          const g=Math.PI*(3-Math.sqrt(5)),d=(1-CS)*.02;
-          return g*(1+d*Math.sin(t*.25));
-        },
-        R=(seed=1234567)=>{
-          let s=seed>>>0;
-          return()=>((s=(s*1664525+1013904223)>>>0)/4294967296);
-        };
+  const C=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const L=(a,b,u)=>a+(b-a)*u;
+  const E=u=>u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+  const GA=CS=>{
+    const g=Math.PI*(3-Math.sqrt(5));
+    const d=(1-CS)*.02;
+    return g*(1+d*Math.sin(t*.25));
+  };
+  const R=(seed=1234567)=>{
+    let s=seed>>>0;
+    return()=>((s=(s*1664525+1013904223)>>>0)/4294967296);
+  };
 
   function draw(){
     const g=x.createLinearGradient(0,0,0,H);
@@ -39,32 +297,44 @@
     x.fillStyle=g;
     x.fillRect(0,0,W,H);
 
-    const cx=W*.5,cy=H*.52,maxR=Math.min(W,H)*.49,
-          CS=C(s.CS,.7,1),TSI=C(s.TSI,0,1),
-          nv=C(s.novelty,0,1),pr=C(s.presence,0,1);
+    const cx=W*.5;
+    const cy=H*.52;
+    const maxR=Math.min(W,H)*.49;
 
-    const N=Math.floor(L(600,3200,E(pr))),
-          ang=GA(CS),base=L(2.2,6,CS),jit=L(0,1,TSI),
-          spin=nv*.8,breath=1+.045*Math.sin(t*.5),
-          rand=R(123456789^(N<<1));
+    const CS=C(s.CS,.7,1);
+    const TSI=C(s.TSI,0,1);
+    const nv=C(s.novelty,0,1);
+    const pr=C(s.presence,0,1);
+
+    const N=Math.floor(L(600,3200,E(pr)));
+    const ang=GA(CS);
+    const base=L(2.2,6,CS);
+    const jit=L(0,1,TSI);
+    const spin=nv*.8;
+    const breath=1+.045*Math.sin(t*.5);
+    const rand=R(123456789^(N<<1));
 
     x.save();
     x.translate(cx,cy);
 
     for(let i=0;i<N;i++){
-      const a=i*ang+t*spin,r=Math.sqrt(i)*base*breath;
-      let px=Math.cos(a)*r,py=Math.sin(a)*r;
+      const a=i*ang+t*spin;
+      const r=Math.sqrt(i)*base*breath;
+      let px=Math.cos(a)*r;
+      let py=Math.sin(a)*r;
 
       px+=(rand()-.5)*jit*(.6+.6*Math.sin(i*.017+t*.3));
       py+=(rand()-.5)*jit*(.6+.6*Math.cos(i*.013-t*.25));
 
-      const scale=maxR/(Math.sqrt(N)*5.8),
-            x0=px*scale,y0=py*scale,
-            sz=L(1.2,2.8,CS)*(1-.5*TSI),
-            p=i/N,
-            h=(210+90*p+120*nv+26*Math.sin(t*.28))%360,
-            sa=Math.round(L(42,68,CS)),
-            lu=Math.round(L(34,62,1-TSI));
+      const scale=maxR/(Math.sqrt(N)*5.8);
+      const x0=px*scale;
+      const y0=py*scale;
+      const sz=L(1.2,2.8,CS)*(1-.5*TSI);
+      const p=i/N;
+
+      const h=(210+90*p+120*nv+26*Math.sin(t*.28))%360;
+      const sa=Math.round(L(42,68,CS));
+      const lu=Math.round(L(34,62,1-TSI));
 
       x.fillStyle=`hsl(${h} ${sa}% ${lu}%)`;
       x.beginPath();
@@ -77,7 +347,8 @@
 
   let last=performance.now();
   function loop(now){
-    const dt=(now-last)/1e3;last=now;
+    const dt=(now-last)/1e3;
+    last=now;
     if(run)t+=dt;
     draw();
     requestAnimationFrame(loop);
@@ -94,18 +365,20 @@
     }
   };
 })();
+</script>
 
-/* Chat + Filing (UI only) */
-const $=id=>document.getElementById(id),
-      stream=$('stream'),
-      form=$('form'),
-      input=$('input'),
-      fileBtn=$('file-btn'),
-      filesBtn=$('files-btn'),
-      filesModal=$('files-modal'),
-      modalCloseBtn=$('modal-close-btn'),
-      modalList=$('modal-list'),
-      fileCount=$('file-count');
+<script>
+/* Chat + Filing utilities (UI only) */
+const $ = id => document.getElementById(id);
+const stream = $('stream');
+const form = $('form');
+const input = $('input');
+const fileBtn = $('file-btn');
+const filesBtn = $('files-btn');
+const filesModal = $('files-modal');
+const modalCloseBtn = $('modal-close-btn');
+const modalList = $('modal-list');
+const fileCount = $('file-count');
 
 function linkify(s){
   return (s||'')
@@ -114,26 +387,25 @@ function linkify(s){
 }
 
 function addMsg(role,html){
-  const id=Date.now().toString(36)+Math.random().toString(36).slice(2,5),
-        row=document.createElement('div');
+  const id = Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  const row = document.createElement('div');
   row.className='row '+(role==='user'?'user':'bot')+' emerge';
-  row.draggable=!0;
-  row.dataset.messageId=id;
+  row.draggable = role==='user'; // bot msgs usually not dragged
+  row.dataset.messageId = id;
 
-  const b=document.createElement('div');
+  const b = document.createElement('div');
   b.className='bubble '+(role==='user'?'user':'bot');
   b.innerHTML=linkify(html);
 
-  const meta=document.createElement('div');
+  const meta = document.createElement('div');
   meta.className='meta';
   meta.textContent=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
 
   row.appendChild(b);
   row.appendChild(meta);
   stream.appendChild(row);
-
   setTimeout(()=>row.classList.add('active'),10);
-  row.addEventListener('dragstart',onDragStart);
+  if(role==='user') row.addEventListener('dragstart',onDragStart);
   stream.scrollTop=stream.scrollHeight;
 }
 
@@ -141,9 +413,7 @@ let filed=(()=>{
   try{
     const r=localStorage.getItem('itplus_files_v1');
     return r?JSON.parse(r):[];
-  }catch(_){
-    return [];
-  }
+  }catch(_){return[]}
 })();
 
 function saveFiled(){
@@ -164,10 +434,7 @@ fileBtn.addEventListener('dragover',e=>{
   e.dataTransfer.dropEffect='move';
   fileBtn.style.opacity=.8;
 });
-
-fileBtn.addEventListener('dragleave',()=>{
-  fileBtn.style.opacity=1;
-});
+fileBtn.addEventListener('dragleave',()=>fileBtn.style.opacity=1);
 
 fileBtn.addEventListener('drop',e=>{
   e.preventDefault();
@@ -175,8 +442,8 @@ fileBtn.addEventListener('drop',e=>{
   fileBtn.style.transform='scale(1)';
   fileBtn.style.opacity=1;
 
-  const text=e.dataTransfer.getData('text/plain'),
-        id=e.dataTransfer.getData('message/id');
+  const text=e.dataTransfer.getData('text/plain');
+  const id=e.dataTransfer.getData('message/id');
 
   filed.push({
     id,
@@ -187,12 +454,13 @@ fileBtn.addEventListener('drop',e=>{
 
   addMsg(
     'bot',
-    'Filing complete: message has been tagged and filed ('+filed.length+' total).\nA new file will be created with the entry:\n'+
-    text.substring(0,60).trim()+'...'
+    "Filing complete.\n\n"+
+    "Message has been tagged and filed ("+filed.length+" total).\n"+
+    "Preview:\n\""+text.substring(0,80).trim()+"\"…"
   );
 
   const row=document.querySelector('[data-message-id="'+id+'"]');
-  if(row)row.remove();
+  if(row) row.remove();
 });
 
 addEventListener('dragend',()=>{
@@ -207,17 +475,17 @@ function openFiles(){
 
   if(!filed.length){
     modalList.innerHTML=
-      '<div style="text-align:center;padding:20px;color:#9aa7b6;">'+
-      'No items filed yet. Drag a message onto the 📁 icon to start filing.'+
+      '<div style="text-align:center;padding:20px;color:var(--muted);">'+
+      'No items filed yet. Drag a user message onto the 📁 icon to start filing.'+
       '</div>';
   }else{
     filed.slice().reverse().forEach(it=>{
       const d=document.createElement('div');
       d.className='file-item';
-      d.innerHTML=linkify(it.text)+'<span class="file-item-time">'+it.time+'</span>';
+      d.innerHTML=linkify(it.text)+
+        '<span class="file-item-time">'+it.time+'</span>';
       modalList.appendChild(d);
     });
-    addMsg('bot','Files opened: '+filed.length+' filed item(s) found.\nUse the close button or click outside to dismiss.');
   }
 
   filesModal.classList.add('open');
@@ -237,9 +505,9 @@ filesModal.addEventListener('click',e=>{
     filesModal.setAttribute('aria-hidden','true');
   }
 });
+</script>
 
-/* ================== AARON IT+ ENGINE ================== */
-
+<script>
 /* ================== AARON IT+ ENGINE ================== */
 
 const AARON_STATE = {
@@ -248,6 +516,10 @@ const AARON_STATE = {
   answers: {
     psyche: [],
     iq: []
+  },
+  done: {
+    psyche: false,
+    iq: false
   }
 };
 
@@ -296,7 +568,6 @@ const AARON_PSYCHE_QUESTIONS = [
   { id:"essence_1", text:"If someone truly understood you, what is the one thing they would absolutely know?" }
 ];
 
-/* Psyche-specific encouragement / reflection hooks */
 const AARON_PSYCHE_FEEDBACK = {
   id_story_1: "Strong start. The scenes you choose first are basically your personal mythos, the anchor points of your story.",
   id_story_2: "Nice differentiation. The versions of you that show up there are how your psyche tracks change over time.",
@@ -372,7 +643,6 @@ const AARON_IQ_TASKS = [
   }
 ];
 
-/* IQ task feedback (static but specific) */
 const AARON_IQ_FEEDBACK = {
   iq_echo_memory:
     "Nice connection. The way you relate echo and memory shows how you track patterns across time.",
@@ -406,7 +676,8 @@ function storeAaronResult(){
     const payload={
       time:new Date().toISOString(),
       psyche:AARON_STATE.answers.psyche,
-      iq:AARON_STATE.answers.iq
+      iq:AARON_STATE.answers.iq,
+      done:AARON_STATE.done
     };
     localStorage.setItem('aaron_it_last_run',JSON.stringify(payload));
   }catch(_){}
@@ -417,7 +688,8 @@ function saveProgress(){
     localStorage.setItem('aaron_it_progress', JSON.stringify({
       phase:AARON_STATE.phase,
       index:AARON_STATE.index,
-      answers:AARON_STATE.answers
+      answers:AARON_STATE.answers,
+      done:AARON_STATE.done
     }));
   }catch(_){}
 }
@@ -452,9 +724,12 @@ function startAaron(){
   AARON_STATE.index=0;
   AARON_STATE.answers.psyche=[];
   AARON_STATE.answers.iq=[];
+  AARON_STATE.done.psyche=false;
+  AARON_STATE.done.iq=false;
   addMsg(
     'bot',
     "Aaron IT+ mapping activated.\n\n"+
+    "Type \"Aaron it\" to start your profile.\n\n"+
     "You can start with either:\n"+
     "- psyche  — core traits, values, relationships, meaning\n"+
     "- iq      — non-linear thought tasks (your intellect pattern)\n\n"+
@@ -467,7 +742,8 @@ async function requestAaronReport(){
   try{
     const payload = {
       psyche: AARON_STATE.answers.psyche,
-      iq: AARON_STATE.answers.iq
+      iq: AARON_STATE.answers.iq,
+      done: AARON_STATE.done
     };
 
     const res = await fetch('/aaron-report', {
@@ -491,7 +767,7 @@ async function requestAaronReport(){
   }
 }
 
-/* Normal chat: send to backend /chat (Groq) with Aaron context */
+/* Normal chat: send to backend /chat (Groq or whatever) with Aaron context */
 async function handleChatWithLLM(userText){
   try{
     const res=await fetch('/chat',{
@@ -521,7 +797,6 @@ function processInput(txt){
   // Global kill switch
   if(t==='exit aaron' || t==='stop aaron'){
     if(AARON_STATE.phase!=='idle' && AARON_STATE.phase!=='done'){
-      // Save progress at the point of stop
       saveProgress();
       AARON_STATE.phase='idle';
       addMsg('bot',
@@ -562,14 +837,17 @@ function processInput(txt){
     addMsg(
       'bot',
       "Help · Aaron IT+ shell\n\n"+
-      "- Normal chat: just talk — messages go to the Groq-backed assistant.\n"+
+      "- Normal chat: just talk — messages go to the model via /chat.\n"+
       "- aaron it: start (or configure) the psyche and intellect mapping module.\n"+
+      "- psyche: run psyche profiling only.\n"+
+      "- iq:     run non-linear IQ-style tasks only.\n"+
       "- method it: see what Aaron IT+ measures and how the 40–200 scale works.\n"+
-      "- last aaron it: regenerate your profile from your last stored full run on this device.\n"+
+      "- last aaron it: regenerate your profile from your last stored run.\n"+
       "- resume aaron: resume a partial run if one is saved.\n"+
-      "- exit aaron: pause the mapping mid-run.\n\n"+
+      "- exit aaron: pause the mapping mid-run.\n"+
+      "- stop and report: end the current section early and get a partial report.\n\n"+
       "Filing:\n"+
-      "- Drag any message onto the 📁 icon to file it.\n"+
+      "- Drag any user message onto the 📁 icon to file it.\n"+
       "- Click the cabinet icon to browse filed items."
     );
     return;
@@ -581,17 +859,18 @@ function processInput(txt){
     return;
   }
 
-  // Regenerate from last stored full run
+  // Regenerate from last stored run
   if(t==='last aaron it' || t==='show last aaron'){
     const raw = localStorage.getItem('aaron_it_last_run');
     if(!raw){
-      addMsg('bot',"I don't have a stored full Aaron IT+ run yet on this device.");
+      addMsg('bot',"I don't have a stored Aaron IT+ run yet on this device.");
       return;
     }
     try{
       const parsed = JSON.parse(raw);
       AARON_STATE.answers.psyche = parsed.psyche || [];
       AARON_STATE.answers.iq = parsed.iq || [];
+      AARON_STATE.done = parsed.done || {psyche:false,iq:false};
       AARON_STATE.phase='done';
       addMsg('bot',"Re-generating your Aaron IT+ profile from the last stored run...");
       requestAaronReport();
@@ -602,9 +881,33 @@ function processInput(txt){
     return;
   }
 
-  // Start Aaron IT+ mapping
+  // Start-only commands for psyche/iq when idle/done
+  if((t==='psyche' || t==='start psyche') &&
+      (AARON_STATE.phase==='idle' || AARON_STATE.phase==='done')){
+    AARON_STATE.phase='psyche';
+    AARON_STATE.index=0;
+    if(!AARON_STATE.answers.psyche) AARON_STATE.answers.psyche=[];
+    saveProgress();
+    addMsg('bot',"Starting psyche-only pass: core traits, values, relationships, meaning.");
+    const q=AARON_PSYCHE_QUESTIONS[0];
+    if(q) addMsg('bot',q.text);
+    return;
+  }
+
+  if((t==='iq' || t==='start iq') &&
+      (AARON_STATE.phase==='idle' || AARON_STATE.phase==='done')){
+    AARON_STATE.phase='iq';
+    AARON_STATE.index=0;
+    if(!AARON_STATE.answers.iq) AARON_STATE.answers.iq=[];
+    saveProgress();
+    addMsg('bot',"Starting non-linear IQ-style tasks.\nThere are "+AARON_IQ_TASKS.length+" of them.");
+    const q=AARON_IQ_TASKS[0];
+    if(q) addMsg('bot',q.prompt);
+    return;
+  }
+
+  // Start Aaron IT+ mapping (chooser)
   if(t==='aaron it' || t==='start aaron it' || t==='run aaron it'){
-    // If we have progress, offer resume/restart choice
     let raw=null;
     try{ raw = localStorage.getItem('aaron_it_progress'); }catch(_){}
     if(raw){
@@ -622,7 +925,6 @@ function processInput(txt){
         }
       }catch(_){}
     }
-    // No partial progress — normal fresh start
     if(AARON_STATE.phase!=='idle' && AARON_STATE.phase!=='done'){
       addMsg('bot',"Aaron IT+ is already running.\nAnswer the current question, or type \"exit aaron\" to stop.");
       return;
@@ -642,6 +944,7 @@ function processInput(txt){
       AARON_STATE.phase = AARON_RESUME_CACHE.phase;
       AARON_STATE.index = AARON_RESUME_CACHE.index;
       AARON_STATE.answers = AARON_RESUME_CACHE.answers || {psyche:[],iq:[]};
+      AARON_STATE.done = AARON_RESUME_CACHE.done || {psyche:false,iq:false};
       addMsg('bot',"Resuming Aaron IT+ "+AARON_STATE.phase+" where you left off.");
       if(AARON_STATE.phase==='psyche'){
         const q=AARON_PSYCHE_QUESTIONS[AARON_STATE.index];
@@ -666,11 +969,47 @@ function processInput(txt){
     return;
   }
 
+  // === META QUERIES WHILE IN PSYCHE / IQ (scores, report) ===
+  if(AARON_STATE.phase==='psyche' || AARON_STATE.phase==='iq'){
+    const phaseLabel = AARON_STATE.phase==='psyche' ? 'psyche profiling' : 'non-linear tasks';
+
+    if(
+      t.includes('score') ||
+      t.includes('scores') ||
+      t.includes('report') ||
+      t.includes('profile') ||
+      t.includes('how did i do')
+    ){
+      addMsg(
+        'bot',
+        "I won't count that as an answer.\n\n"+
+        "Right now we're in the middle of the "+phaseLabel+" sequence.\n"+
+        "I can generate a report after we finish this section, or if you say \"stop and report\".\n\n"+
+        "If you want to keep going, answer the current question directly.\n"+
+        "If you want a partial report now, type \"stop and report\"."
+      );
+      return;
+    }
+
+    if(t==='stop and report'){
+      // Partial report with current data
+      clearProgress();
+      AARON_STATE.phase='done';
+      storeAaronResult();
+      addMsg(
+        'bot',
+        "Stopping here and generating a partial Aaron IT+ report based on what we have so far."
+      );
+      requestAaronReport();
+      return;
+    }
+  }
+
   // Extra intuitive control while inside psyche/iq
   if(AARON_STATE.phase==='psyche' || AARON_STATE.phase==='iq'){
     const lt=t;
 
-    // Switch track
+    // Switch track fresh
     if(lt.includes('switch') && lt.includes('psyche')){
       AARON_STATE.phase='psyche';
       AARON_STATE.index=0;
@@ -705,7 +1044,7 @@ function processInput(txt){
     }
   }
 
-  // Choice of starting path
+  // Choice of starting path (chooser mode)
   if(AARON_STATE.phase==='choose'){
     if(t.includes('psyche')){
       AARON_STATE.phase='psyche';
@@ -736,12 +1075,13 @@ function processInput(txt){
     const idx = AARON_STATE.index;
     const q=AARON_PSYCHE_QUESTIONS[idx];
     if(!q){
-      // Safety: no question; move to IQ
-      AARON_STATE.phase='iq';
-      AARON_STATE.index=0;
-      addMsg('bot',"Psyche set appears complete. Moving to non-linear tasks.");
-      const first=AARON_IQ_TASKS[0];
-      if(first) addMsg('bot',first.prompt);
+      // Safety: no question, just end psyche and report
+      AARON_STATE.done.psyche=true;
+      AARON_STATE.phase='done';
+      clearProgress();
+      storeAaronResult();
+      addMsg('bot',"Psyche set appears complete. Generating your current profile now (psyche layer).");
+      requestAaronReport();
       return;
     }
 
@@ -751,24 +1091,28 @@ function processInput(txt){
 
     AARON_STATE.index = idx+1;
 
-    // Decide what comes next
     if(AARON_STATE.index < AARON_PSYCHE_QUESTIONS.length){
       const nextQ = AARON_PSYCHE_QUESTIONS[AARON_STATE.index];
       addMsg('bot', fb + "\n\nNext:\n" + nextQ.text);
+      saveProgress();
     }else{
-      // Psyche complete → shift to IQ
-      AARON_STATE.phase='iq';
-      AARON_STATE.index=0;
-      const first = AARON_IQ_TASKS[0];
+      // Psyche complete → STOP, report, then OFFER IQ
+      AARON_STATE.done.psyche=true;
+      AARON_STATE.phase='done';
+      clearProgress();
+      storeAaronResult();
       addMsg(
         'bot',
-        fb +
-        "\n\nPsyche profile captured.\nNow we’ll move into the non-linear thought tasks (IQ-analog).\n\n"+
-        (first ? "First task:\n"+first.prompt : "")
+        fb + "\n\nPsyche profile captured.\nGenerating your current profile now (psyche layer)."
       );
+      requestAaronReport();
+      if(!AARON_STATE.done.iq){
+        addMsg(
+          'bot',
+          "When you're ready, we can also run the non-linear IQ-style tasks.\nType \"iq\" to start them."
+        );
+      }
     }
-
-    saveProgress();
     return;
   }
 
@@ -776,22 +1120,26 @@ function processInput(txt){
     const idx = AARON_STATE.index;
     const q=AARON_IQ_TASKS[idx];
     if(!q){
-      // Safety: no question; finalize if we have data
+      // Safety: no question; finalize
+      AARON_STATE.done.iq=true;
       AARON_STATE.phase='done';
       clearProgress();
       storeAaronResult();
-      addMsg('bot',"IQ task list appears complete. Generating your profile and index now...");
+      addMsg('bot',"IQ task list appears complete. Generating your current profile now (IQ-analog layer).");
       requestAaronReport();
+      if(!AARON_STATE.done.psyche){
+        addMsg(
+          'bot',
+          "If you’d like, we can also run the psyche profile.\nType \"psyche\" to do that next."
+        );
+      }
       return;
     }
 
-    // Store answer
     AARON_STATE.answers.iq.push({id:q.id,question:q.prompt,answer:txt});
 
-    // Static encouragement
     const fb = AARON_IQ_FEEDBACK[q.id] || "Got it. That answer gives me a clear read on how your mind moves here.";
 
-    // Flag likely merged-word accident
     if(detectMergedWord(txt)){
       addMsg(
         'bot',
@@ -808,15 +1156,21 @@ function processInput(txt){
       addMsg('bot', fb + "\n\nNext task:\n" + nextQ.prompt);
       saveProgress();
     }else{
-      // Done
+      AARON_STATE.done.iq=true;
       AARON_STATE.phase='done';
       clearProgress();
       storeAaronResult();
       addMsg(
         'bot',
-        fb + "\n\nAaron IT+ mapping complete.\n\nGenerating your profile and index now..."
+        fb + "\n\nAaron IT+ non-linear tasks complete.\nGenerating your current profile now (IQ-analog layer)."
       );
       requestAaronReport();
+      if(!AARON_STATE.done.psyche){
+        addMsg(
+          'bot',
+          "If you’d like, we can also run the psyche profile.\nType \"psyche\" to do that next."
+        );
+      }
     }
     return;
   }
@@ -841,10 +1195,16 @@ form.addEventListener('submit',e=>{
   "Welcome to Aaron IT+ · φ-Field console.\n\n"+
   "Type \"Aaron it\" to start your profile.\n\n"+
   "You can also use:\n"+
-  "- help it    — quick guide\n"+
-  "- method it  — what this system measures\n"+
-  "- last aaron it  — regenerate from last full run\n"+
-  "- resume aaron   — pick up a partial run\n"+
-  "- or just talk   — normal conversation via the model.\n\n"+
-  "Drag any message onto the folder icon to file it; click the cabinet icon to browse."
+  "- help it       — quick guide\n"+
+  "- method it     — what this system measures\n"+
+  "- psyche        — run psyche profiling only\n"+
+  "- iq            — run non-linear tasks only\n"+
+  "- last aaron it — regenerate from last run\n"+
+  "- resume aaron  — pick up a partial run\n"+
+  "- or just talk  — normal conversation via the model.\n\n"+
+  "Drag any user message onto the folder icon to file it; click the cabinet icon to browse."
 ))();
+</script>
+
+</body>
+</html>
